@@ -68,18 +68,18 @@ for arg in "${run_args[@]}"; do
         if [[ -n $gpu_id ]]; then
           echo "GPU $gpu_id is available. Starting prune_finetune.py with dataset '$arg', prune_percent '$prune_percent', prune_type '$prune_type', prune_decay '$prune_decay', and v_pow '$vp' on port $port"
           
-          CUDA_VISIBLE_DEVICES=$gpu_id nohup python prune_finetune.py \
+          CUDA_VISIBLE_DEVICES=$gpu_id nohup python large_prune_finetune.py \
             -s "data/matrix_city/aerial/train/block_all" \
             -m "output/${arg}_${prune_percent}" \
             --eval \
             --port $port \
-            --start_checkpoint "output/$arg/point_cloud/iteration_30000/point_cloud.ply" \
+            --start_pointcloud "output/$arg/point_cloud/iteration_30000/point_cloud.ply" \
             --iteration 35000 \
             --prune_percent $prune_percent \
             --prune_type $prune_type \
             --prune_decay $prune_decay \
             --position_lr_max_steps 35000 \
-            --v_pow $vp > "logs_prune/${arg}_${prune_percent}_prunned.log" 2>&1
+            --v_pow $vp > "logs_prune/${arg}_${prune_percent}_prunned.log" 2>&1 &
 
           # Increment the port number for the next run
           ((port++))
