@@ -95,6 +95,13 @@ def training(
     gaussians.scheduler = ExponentialLR(gaussians.optimizer, gamma=0.95)
 
     with torch.no_grad():
+        if not os.path.exists(scene.model_path):
+            os.makedirs(scene.model_path)
+        torch.save(
+            (gaussians.capture(), 0),
+            scene.model_path + "/chkpnt" + str(0) + ".pth",
+        )
+
         ic("Before prune iteration, number of gaussians: " + str(len(gaussians.get_xyz)))
         i = 0
         gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background, dataset)
@@ -266,7 +273,7 @@ def training(
                 )
                 
                 if iteration == checkpoint_iterations[-1]:
-                    gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background)
+                    gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background, dataset)
                     v_list = calculate_v_imp_score(gaussians, imp_list, args.v_pow)
                     np.savez(os.path.join(scene.model_path,"imp_score"), v_list.cpu().detach().numpy()) 
 
