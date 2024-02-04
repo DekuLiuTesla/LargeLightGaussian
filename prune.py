@@ -15,6 +15,7 @@ from random import randint
 from gaussian_renderer import render, count_render
 import sys
 from scene import Scene, GaussianModel
+from scene.dataset_readers import CameraInfo
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
@@ -22,6 +23,7 @@ from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.graphics_utils import getWorld2View2
+from utils.camera_utils import loadCam
 from icecream import ic
 import random
 import copy
@@ -130,10 +132,13 @@ def calculate_v_imp_score(gaussians, imp_list, v_pow):
 
 
 
-def prune_list(gaussians, scene, pipe, background):
+def prune_list(gaussians, scene, pipe, background, dataset=None):
     viewpoint_stack = scene.getTrainCameras().copy()
     gaussian_list, imp_list = None, None
     viewpoint_cam = viewpoint_stack.pop()
+    # check class of viewpoint_cam
+    if isinstance(viewpoint_cam, CameraInfo):
+        viewpoint_cam = loadCam(dataset, viewpoint_cam.uid, viewpoint_cam, 1)
     render_pkg = count_render(viewpoint_cam, gaussians, pipe, background)
     gaussian_list, imp_list = (
         render_pkg["gaussians_count"],
@@ -145,6 +150,8 @@ def prune_list(gaussians, scene, pipe, background):
         # Pick a random Camera
         # prunning
         viewpoint_cam = viewpoint_stack.pop()
+        if isinstance(viewpoint_cam, CameraInfo):
+            viewpoint_cam = loadCam(dataset, viewpoint_cam.uid, viewpoint_cam, 1)
         render_pkg = count_render(viewpoint_cam, gaussians, pipe, background)
         # image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         gaussians_count, important_score = (

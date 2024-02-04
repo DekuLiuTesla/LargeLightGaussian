@@ -94,6 +94,80 @@ def training(
     first_iter += 1
     gaussians.scheduler = ExponentialLR(gaussians.optimizer, gamma=0.95)
 
+    with torch.no_grad():
+        ic("Before prune iteration, number of gaussians: " + str(len(gaussians.get_xyz)))
+        i = 0
+        gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background, dataset)
+
+        if args.prune_type == "important_score":
+            gaussians.prune_gaussians(
+                (args.prune_decay**i) * args.prune_percent, imp_list
+            )
+        elif args.prune_type == "v_important_score":
+            # normalize scale
+            v_list = calculate_v_imp_score(gaussians, imp_list, args.v_pow)
+            gaussians.prune_gaussians(
+                (args.prune_decay**i) * args.prune_percent, v_list
+            )
+        elif args.prune_type == "max_v_important_score":
+            v_list = imp_list * torch.max(gaussians.get_scaling, dim=1)[0]
+            gaussians.prune_gaussians(
+                (args.prune_decay**i) * args.prune_percent, v_list
+            )
+        elif args.prune_type == "count":
+            gaussians.prune_gaussians(
+                (args.prune_decay**i) * args.prune_percent, gaussian_list
+            )
+        elif args.prune_type == "opacity":
+            gaussians.prune_gaussians(
+                (args.prune_decay**i) * args.prune_percent,
+                gaussians.get_opacity.detach(),
+            )
+        # TODO(release different pruning method)
+        # elif args.prune_type == "HDBSCAN":
+        #     masks = HDBSCAN_prune(gaussians, imp_list, (args.prune_decay**i)*args.prune_percent)
+        #     gaussians.prune_points(masks)
+        # # elif args.prune_type == "v_important_score":
+        # #     imp_list *
+        # elif args.prune_type == "two_step":
+        #     if i == 0:
+        #         volume = torch.prod(gaussians.get_scaling, dim = 1)
+        #         index = int(len(volume) * 0.9)
+        #         sorted_volume, sorted_indices = torch.sort(volume, descending=True, dim=0)
+        #         kth_percent_largest = sorted_volume[index]
+        #         v_list = torch.pow(volume/kth_percent_largest, args.v_pow)
+        #         v_list = v_list * imp_list
+        #         gaussians.prune_gaussians((args.prune_decay**i)*args.prune_percent, v_list)
+        #     else:
+        #         k = 5^(1*i) * 100
+        #         masks = uniform_prune(gaussians, k, imp_list, 0.3, "k_mean")
+        #         gaussians.prune_points(masks)
+        # else:
+        #     k = len(gaussians.get_xyz)//500 * i
+        #     masks = uniform_prune(gaussians, k, imp_list, (args.prune_decay**i)*args.prune_percent, args.prune_type)
+        #     gaussians.prune_points(masks)
+        # gaussians.prune_gaussians(args.prune_percent, imp_list)
+        # gaussians.optimizer.zero_grad(set_to_none = True) #hachy way to maintain grad
+        # if (iteration in args.opacity_prune_iterations):
+        #         gaussians.prune_opacity(0.05)
+        else:
+            raise Exception("Unsupportive pruning method")
+
+        ic("After prune iteration, number of gaussians: " + str(len(gaussians.get_xyz)))
+
+    # if iteration in args.densify_iteration:
+    #     gaussians.max_radii2D[visibility_filter] = torch.max(
+    #         gaussians.max_radii2D[visibility_filter], radii[visibility_filter]
+    #     )
+    #     gaussians.add_densification_stats(
+    #         viewspace_point_tensor, visibility_filter
+    #     )
+    #     gaussians.densify(opt.densify_grad_threshold, scene.cameras_extent)
+    
+        ic("after")
+        ic(gaussians.get_xyz.shape)
+        ic(len(gaussians.optimizer.param_groups[0]['params'][0]))
+
     for iteration in range(first_iter, opt.iterations + 1):
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -209,80 +283,6 @@ def training(
                 render,
                 (pipe, background),
             )
-
-            if iteration in args.prune_iterations:
-                ic("Before prune iteration, number of gaussians: " + str(len(gaussians.get_xyz)))
-                i = args.prune_iterations.index(iteration)
-                gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background)
-
-                if args.prune_type == "important_score":
-                    gaussians.prune_gaussians(
-                        (args.prune_decay**i) * args.prune_percent, imp_list
-                    )
-                elif args.prune_type == "v_important_score":
-                    # normalize scale
-                    v_list = calculate_v_imp_score(gaussians, imp_list, args.v_pow)
-                    gaussians.prune_gaussians(
-                        (args.prune_decay**i) * args.prune_percent, v_list
-                    )
-                elif args.prune_type == "max_v_important_score":
-                    v_list = imp_list * torch.max(gaussians.get_scaling, dim=1)[0]
-                    gaussians.prune_gaussians(
-                        (args.prune_decay**i) * args.prune_percent, v_list
-                    )
-                elif args.prune_type == "count":
-                    gaussians.prune_gaussians(
-                        (args.prune_decay**i) * args.prune_percent, gaussian_list
-                    )
-                elif args.prune_type == "opacity":
-                    gaussians.prune_gaussians(
-                        (args.prune_decay**i) * args.prune_percent,
-                        gaussians.get_opacity.detach(),
-                    )
-                # TODO(release different pruning method)
-                # elif args.prune_type == "HDBSCAN":
-                #     masks = HDBSCAN_prune(gaussians, imp_list, (args.prune_decay**i)*args.prune_percent)
-                #     gaussians.prune_points(masks)
-                # # elif args.prune_type == "v_important_score":
-                # #     imp_list *
-                # elif args.prune_type == "two_step":
-                #     if i == 0:
-                #         volume = torch.prod(gaussians.get_scaling, dim = 1)
-                #         index = int(len(volume) * 0.9)
-                #         sorted_volume, sorted_indices = torch.sort(volume, descending=True, dim=0)
-                #         kth_percent_largest = sorted_volume[index]
-                #         v_list = torch.pow(volume/kth_percent_largest, args.v_pow)
-                #         v_list = v_list * imp_list
-                #         gaussians.prune_gaussians((args.prune_decay**i)*args.prune_percent, v_list)
-                #     else:
-                #         k = 5^(1*i) * 100
-                #         masks = uniform_prune(gaussians, k, imp_list, 0.3, "k_mean")
-                #         gaussians.prune_points(masks)
-                # else:
-                #     k = len(gaussians.get_xyz)//500 * i
-                #     masks = uniform_prune(gaussians, k, imp_list, (args.prune_decay**i)*args.prune_percent, args.prune_type)
-                #     gaussians.prune_points(masks)
-                # gaussians.prune_gaussians(args.prune_percent, imp_list)
-                # gaussians.optimizer.zero_grad(set_to_none = True) #hachy way to maintain grad
-                # if (iteration in args.opacity_prune_iterations):
-                #         gaussians.prune_opacity(0.05)
-                else:
-                    raise Exception("Unsupportive pruning method")
-
-                ic("After prune iteration, number of gaussians: " + str(len(gaussians.get_xyz)))
-
-            # if iteration in args.densify_iteration:
-            #     gaussians.max_radii2D[visibility_filter] = torch.max(
-            #         gaussians.max_radii2D[visibility_filter], radii[visibility_filter]
-            #     )
-            #     gaussians.add_densification_stats(
-            #         viewspace_point_tensor, visibility_filter
-            #     )
-            #     gaussians.densify(opt.densify_grad_threshold, scene.cameras_extent)
-            
-                ic("after")
-                ic(gaussians.get_xyz.shape)
-                ic(len(gaussians.optimizer.param_groups[0]['params'][0]))
 
             if iteration < opt.iterations:
                 gaussians.optimizer.step()

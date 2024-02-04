@@ -74,11 +74,14 @@ for arg in "${run_args[@]}"; do
             --eval \
             --port $port \
             --start_pointcloud "output/$arg/point_cloud/iteration_30000/point_cloud.ply" \
-            --iteration 35000 \
+            --iteration 30000 \
             --prune_percent $prune_percent \
             --prune_type $prune_type \
             --prune_decay $prune_decay \
-            --position_lr_max_steps 35000 \
+            --position_lr_max_steps 30000 \
+            --position_lr_init 0.00001 \
+            --position_lr_final 0.0000001 \
+            --scaling_lr 0.0025 \
             --v_pow $vp > "logs_prune/${arg}_${prune_percent}_prunned.log" 2>&1 &
 
           # Increment the port number for the next run
