@@ -31,7 +31,7 @@ import copy
 import json
 import numpy as np
 from utils.camera_utils import loadCam
-from utils.logger_utils import prepare_output_and_logger, training_report
+from utils.logger_utils import prepare_output_and_logger, training_report_large
 from torch.optim.lr_scheduler import ExponentialLR
 
 try:
@@ -94,6 +94,8 @@ def training(args, dataset, opt, pipe, testing_iterations, saving_iterations, ch
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
+
+    print("Number of student points at initialisation : ", student_gaussians._opacity.shape[0])
 
     # os.makedirs(student_scene.model_path + "/vis_data", exist_ok=True)
     for iteration in range(first_iter, opt.iterations + 1):        
@@ -159,7 +161,7 @@ def training(args, dataset, opt, pipe, testing_iterations, saving_iterations, ch
                 ic(student_gaussians._features_rest.detach().shape)
                 student_scene.save(iteration)
 
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, student_scene, render, (pipe, background))
+            training_report_large(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, dataset, student_scene, render, (pipe, background))
 
             # Optimizer step
             if iteration < opt.iterations:
