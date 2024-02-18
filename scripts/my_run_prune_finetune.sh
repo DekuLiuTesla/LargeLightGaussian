@@ -9,7 +9,7 @@ get_available_gpu() {
 }
 
 # Initial port number
-port=6041
+port=7041
 
 # Only one dataset specified here, but you could run multiple
 declare -a run_args=(
@@ -34,7 +34,7 @@ declare -a run_args=(
 
 
 # Prune percentages and corresponding decays, volume power
-declare -a prune_percents=(0.66)
+declare -a prune_percents=(0.75)
 # decay rate for the following prune. The 2nd prune would prune out 0.5 x 0.6 = 0.3 of the remaining gaussian
 declare -a prune_decays=(1)
 # The volumetric importance power. The higher it is the more weight the volume is in the Global significant
@@ -64,7 +64,7 @@ for arg in "${run_args[@]}"; do
     for prune_type in "${prune_types[@]}"; do
       # Wait for an available GPU
       while true; do
-        gpu_id=$(get_available_gpu)
+        gpu_id=6
         if [[ -n $gpu_id ]]; then
           echo "GPU $gpu_id is available. Starting prune_finetune.py with dataset '$arg', prune_percent '$prune_percent', prune_type '$prune_type', prune_decay '$prune_decay', and v_pow '$vp' on port $port"
           
@@ -75,14 +75,16 @@ for arg in "${run_args[@]}"; do
             --port $port \
             --start_pointcloud "output/$arg/point_cloud/iteration_30000/point_cloud.ply" \
             --iteration 30000 \
+            --save_iterations 30000 \
+            --checkpoint_iterations 30000 \
             --prune_percent $prune_percent \
             --prune_type $prune_type \
             --prune_decay $prune_decay \
             --position_lr_max_steps 30000 \
-            --position_lr_init 0.00001 \
-            --position_lr_final 0.0000001 \
-            --scaling_lr 0.0025 \
-            --v_pow $vp > "logs_prune/${arg}_${prune_percent}_prunned.log" 2>&1 &
+            --position_lr_init 0.0000003 \
+            --position_lr_final 0.000000003 \
+            --scaling_lr 0.000075 \
+            --v_pow $vp > "logs_prune/${arg}_${prune_percent}_prunned_lr2.log" 2>&1
 
           # Increment the port number for the next run
           ((port++))
