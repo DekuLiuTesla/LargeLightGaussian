@@ -9,11 +9,11 @@ get_available_gpu() {
 }
 
 # Initial port number
-port=6025
+port=6526
 
 # Datasets
 declare -a run_args=(
-    "vox_mc_aerial_block_all_loss_avg_lr2_30k"
+    "block_mc_aerial_block_all_lr_c36_loss_5_75"
     # "bonsai"
     # "counter"
     # "kitchen"
@@ -24,6 +24,8 @@ declare -a run_args=(
     # "truck"
 )
 
+# Prune percentages, not used in this script
+declare -a prune_percent=0.66
 
 # activate psudo view, else using train view for distillation 
 declare -a virtue_view_arg=(
@@ -36,22 +38,20 @@ for arg in "${run_args[@]}"; do
     # Wait for an available GPU
     while true; do
       # gpu_id=$(get_available_gpu)
-      gpu_id=0
+      gpu_id=7
       if [[ -n $gpu_id ]]; then
         echo "GPU $gpu_id is available. Starting distill_train.py with dataset '$arg' and options '$view' on port $port"
         CUDA_VISIBLE_DEVICES=$gpu_id nohup python large_distill_train.py \
           -s "data/matrix_city/aerial/train/block_all" \
-          -m "output/${arg}_${prune_percent}" \
+          -m "output/${arg}_distill" \
           --start_checkpoint "output/${arg}/chkpnt30000.pth" \
           --iteration 40000 \
           --eval \
           --teacher_model "output/${arg}/chkpnt30000.pth" \
           --new_max_sh 2 \
-          --position_lr_init 0.00008 \
-          --position_lr_final 0.0000008 \
-          --scaling_lr 0.0025 \
-          --rotation_lr 0.0005 \
-          --feature_lr 0.001 \
+          --position_lr_init 0.0000003 \
+          --position_lr_final 0.000000003 \
+          --scaling_lr 0.000075 \
           --position_lr_max_steps 40000 \
           --enable_covariance \
           $view \
