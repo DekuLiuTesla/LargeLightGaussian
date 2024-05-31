@@ -9,19 +9,13 @@ get_available_gpu() {
 }
 
 # Initial port number
-port=6526
+port=3526
 
 # Datasets
 declare -a run_args=(
-    "block_rubble_all_lr_c9_loss_12_r4_40_lr64"
-    "block_rubble_all_lr_c9_loss_12_r4_50_lr64"
-    "block_rubble_all_lr_c9_loss_12_r4_60_lr64"
-    # "kitchen"
-    # "room"
-    # "stump"
-    # "garden"
-    #  "train"
-    # "truck"
+    "block_residence_all_lr_c20_loss_8_r4_40_lr64"
+    "block_residence_all_lr_c20_loss_8_r4_50_lr64"
+    "block_residence_all_lr_c20_loss_8_r4_60_lr64"
 )
 
 # activate psudo view, else using train view for distillation 
@@ -38,17 +32,17 @@ for arg in "${run_args[@]}"; do
       if [[ -n $gpu_id ]]; then
         echo "GPU $gpu_id is available. Starting distill_train.py with dataset '$arg' and options '$view' on port $port"
         CUDA_VISIBLE_DEVICES=$gpu_id nohup python large_distill_train.py \
-          -s "data/mill19/rubble-pixsfm/train" \
+          -s "data/urban_scene_3d/residence-pixsfm/train" \
           -m "output/${arg}_distill" \
           --start_checkpoint "output/${arg}/chkpnt30000.pth" \
-          --iteration 35000 \
+          --iteration 40000 \
           --eval \
           --teacher_model "output/${arg}/chkpnt30000.pth" \
           --new_max_sh 2 \
           --position_lr_init 0.0000003 \
           --position_lr_final 0.000000003 \
           --scaling_lr 0.000075 \
-          --position_lr_max_steps 35000 \
+          --position_lr_max_steps 40000 \
           --enable_covariance \
           $view \
           --port $port > "logs_prune/distill_${arg}_${view}.log" 2>&1 &

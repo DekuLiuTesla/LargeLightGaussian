@@ -13,15 +13,9 @@ port=6526
 
 # Datasets
 declare -a run_args=(
-    "block_building_all_lr_c20_loss_10_lr2_r4_40_lr64"
-    "block_building_all_lr_c20_loss_10_lr2_r4_50_lr64"
-    "block_building_all_lr_c20_loss_10_lr2_r4_60_lr64"
-    # "kitchen"
-    # "room"
-    # "stump"
-    # "garden"
-    #  "train"
-    # "truck"
+    "block_mc_aerial_block_all_lr_c36_loss_5_50"
+    "block_mc_aerial_block_all_lr_c36_loss_5_66"
+    "block_mc_aerial_block_all_lr_c36_loss_5_75"
 )
 
 # activate psudo view, else using train view for distillation 
@@ -35,10 +29,10 @@ for arg in "${run_args[@]}"; do
     # Wait for an available GPU
     while true; do
       gpu_id=$(get_available_gpu)
-      if [[ -n $gpu_id ]]; then
+            if [[ -n $gpu_id ]]; then
         echo "GPU $gpu_id is available. Starting distill_train.py with dataset '$arg' and options '$view' on port $port"
         CUDA_VISIBLE_DEVICES=$gpu_id nohup python large_distill_train.py \
-          -s "data/mill19/building-pixsfm/train" \
+          -s "data/matrix_city/aerial/train/block_all" \
           -m "output/${arg}_distill" \
           --start_checkpoint "output/${arg}/chkpnt30000.pth" \
           --iteration 40000 \

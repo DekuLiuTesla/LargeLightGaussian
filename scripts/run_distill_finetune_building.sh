@@ -13,19 +13,10 @@ port=6526
 
 # Datasets
 declare -a run_args=(
-    "block_mc_aerial_block_all_lr_c36_loss_5_75"
-    # "bonsai"
-    # "counter"
-    # "kitchen"
-    # "room"
-    # "stump"
-    # "garden"
-    #  "train"
-    # "truck"
+    "block_building_all_lr_c20_loss_10_lr2_r4_40_lr64"
+    "block_building_all_lr_c20_loss_10_lr2_r4_50_lr64"
+    "block_building_all_lr_c20_loss_10_lr2_r4_60_lr64"
 )
-
-# Prune percentages, not used in this script
-declare -a prune_percent=0.66
 
 # activate psudo view, else using train view for distillation 
 declare -a virtue_view_arg=(
@@ -37,12 +28,11 @@ for arg in "${run_args[@]}"; do
   for view in "${virtue_view_arg[@]}"; do
     # Wait for an available GPU
     while true; do
-      # gpu_id=$(get_available_gpu)
-      gpu_id=7
+      gpu_id=$(get_available_gpu)
       if [[ -n $gpu_id ]]; then
         echo "GPU $gpu_id is available. Starting distill_train.py with dataset '$arg' and options '$view' on port $port"
         CUDA_VISIBLE_DEVICES=$gpu_id nohup python large_distill_train.py \
-          -s "data/matrix_city/aerial/train/block_all" \
+          -s "data/mill19/building-pixsfm/train" \
           -m "output/${arg}_distill" \
           --start_checkpoint "output/${arg}/chkpnt30000.pth" \
           --iteration 40000 \
@@ -55,7 +45,7 @@ for arg in "${run_args[@]}"; do
           --position_lr_max_steps 40000 \
           --enable_covariance \
           $view \
-          --port $port > "logs_prune/distill_${arg}_${view}.log" 2>&1
+          --port $port > "logs_prune/distill_${arg}_${view}.log" 2>&1 &
 
         # Increment the port number for the next run
         ((port++))

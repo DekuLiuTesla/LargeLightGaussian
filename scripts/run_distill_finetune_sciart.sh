@@ -14,14 +14,8 @@ port=4526
 # Datasets
 declare -a run_args=(
     "block_sciart_all_lr_c9_loss_5_r4_40_lr64"
-    "block_sciart_all_lr_c9_loss_5_r4_40_lr64"
-    "block_sciart_all_lr_c9_loss_5_r4_40_lr64"
-    # "kitchen"
-    # "room"
-    # "stump"
-    # "garden"
-    #  "train"
-    # "truck"
+    "block_sciart_all_lr_c9_loss_5_r4_50_lr64"
+    "block_sciart_all_lr_c9_loss_5_r4_60_lr64"
 )
 
 # activate psudo view, else using train view for distillation 
