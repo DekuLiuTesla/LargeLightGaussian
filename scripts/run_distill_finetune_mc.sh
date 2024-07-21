@@ -13,17 +13,16 @@ port=6526
 
 # Datasets
 declare -a run_args=(
-    "block_mc_aerial_block_all_lr_c36_loss_5_50"
-    "block_mc_aerial_block_all_lr_c36_loss_5_66"
-    "block_mc_aerial_block_all_lr_c36_loss_5_75"
+    "block_mc_aerial_block_all_lr_c36_loss_8_50"
+    "block_mc_aerial_block_all_lr_c36_loss_8_66"
+    "block_mc_aerial_block_all_lr_c36_loss_8_75"
 )
 
 # activate psudo view, else using train view for distillation 
 declare -a virtue_view_arg=(
   "--augmented_view"
 )
-# compress_gaussian/output5_prune_final_result/bicycle_v_important_score_oneshot_prune_densify0.67_vpow0.1_try3_decay1
-# compress_gaussian/output2
+
 for arg in "${run_args[@]}"; do
   for view in "${virtue_view_arg[@]}"; do
     # Wait for an available GPU
@@ -50,11 +49,11 @@ for arg in "${run_args[@]}"; do
         # Increment the port number for the next run
         ((port++))
         # Allow some time for the process to initialize and potentially use GPU memory
-        sleep 60
+        sleep 120
         break
       else
-        echo "No GPU available at the moment. Retrying in 1 minute."
-        sleep 60
+        echo "No GPU available at the moment. Retrying in 2 minute."
+        sleep 120
       fi
     done
   done

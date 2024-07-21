@@ -2,7 +2,7 @@
 
 # Function to get the id of an available GPU
 get_available_gpu() {
-  local mem_threshold=10000
+  local mem_threshold=500
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -v threshold="$mem_threshold" -F', ' '
    $2 < threshold { print $1; exit }
   '
@@ -71,16 +71,16 @@ for arg in "${run_args[@]}"; do
             --position_lr_init 0.000000005 \
             --position_lr_final 0.00000000005 \
             --scaling_lr 0.000000125 \
-            --v_pow $vp > "logs_prune/${arg}_${prune_name}_prunned.log" 2>&1
+            --v_pow $vp > "logs_prune/${arg}_${prune_name}_prunned.log" 2>&1 &
 
           # Increment the port number for the next run
           ((port++))
           # Allow some time for the process to initialize and potentially use GPU memory
-          sleep 60
+          sleep 120
           break
         else
-          echo "No GPU available at the moment. Retrying in 1 minute."
-          sleep 60
+          echo "No GPU available at the moment. Retrying in 2 minute."
+          sleep 120
         fi
       done
     done
