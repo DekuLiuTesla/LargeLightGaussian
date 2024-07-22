@@ -11,7 +11,7 @@
 
 import torch
 import math
-from diff_gaussian_rasterization import (
+from compress_diff_gaussian_rasterization import (
     GaussianRasterizationSettings,
     GaussianRasterizer,
 )
