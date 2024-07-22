@@ -16,7 +16,7 @@ os.path.dirname(os.path.abspath(__file__))
 
 setup(
     name="compress_diff_gaussian_rasterization",
-    packages=['diff_gaussian_rasterization'],
+    packages=['compress_diff_gaussian_rasterization'],
     ext_modules=[
         CUDAExtension(
             name="compress_diff_gaussian_rasterization._C",
