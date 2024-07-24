@@ -2,7 +2,7 @@
 
 # Function to get the id of an available GPU
 get_available_gpu() {
-  local mem_threshold=500
+  local mem_threshold=5000
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -v threshold="$mem_threshold" -F', ' '
   $2 < threshold { print $1; exit }
   '
@@ -13,9 +13,9 @@ port=6526
 
 # Datasets
 declare -a run_args=(
-    "block_rubble_all_lr_c9_loss_12_r4_40_lr64"
-    "block_rubble_all_lr_c9_loss_12_r4_50_lr64"
-    "block_rubble_all_lr_c9_loss_12_r4_60_lr64"
+    "rubble_c9_r4_light_40"
+    "rubble_c9_r4_light_50"
+    "rubble_c9_r4_light_60"
 )
 
 # activate psudo view, else using train view for distillation 

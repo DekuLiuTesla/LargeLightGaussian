@@ -13,9 +13,9 @@ port=6526
 
 # Datasets
 declare -a run_args=(
-    "block_mc_aerial_block_all_lr_c36_loss_8_50"
-    "block_mc_aerial_block_all_lr_c36_loss_8_66"
-    "block_mc_aerial_block_all_lr_c36_loss_8_75"
+    "mc_aerial_c36_light_50"
+    "mc_aerial_c36_light_66"
+    "mc_aerial_c36_light_75"
 )
 
 # activate psudo view, else using train view for distillation 

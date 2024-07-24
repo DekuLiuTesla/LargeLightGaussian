@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SCENES=(bicycle bonsai counter garden kitchen room stump train truck)
-SCENES=(block_mc_aerial_block_all_lr_c36_loss_8_50 block_mc_aerial_block_all_lr_c36_loss_8_66 block_mc_aerial_block_all_lr_c36_loss_8_75)
+SCENES=(rubble_c9_r4_light_40 rubble_c9_r4_light_50 rubble_c9_r4_light_60)
 VQ_RATIO=0.4
 CODEBOOK_SIZE=8192
 

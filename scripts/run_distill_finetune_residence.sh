@@ -13,9 +13,9 @@ port=3526
 
 # Datasets
 declare -a run_args=(
-    "block_residence_all_lr_c20_loss_8_r4_40_lr64"
-    "block_residence_all_lr_c20_loss_8_r4_50_lr64"
-    "block_residence_all_lr_c20_loss_8_r4_60_lr64"
+    "residence_c20_r4_light_40"
+    "residence_c20_r4_light_50"
+    "residence_c20_r4_light_60"
 )
 
 # activate psudo view, else using train view for distillation 

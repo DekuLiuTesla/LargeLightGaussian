@@ -13,7 +13,7 @@ port=4041
 
 # Only one dataset specified here, but you could run multiple
 declare -a run_args=(
-    "block_sciart_all_lr_c9_loss_5_r4"
+    "sciart_c9_r4"
   )
 
 
@@ -56,7 +56,7 @@ prune_name="${prune_names[i]}"
           
           CUDA_VISIBLE_DEVICES=$gpu_id nohup python large_prune_finetune.py \
             -s "data/urban_scene_3d/sci-art-pixsfm/train" \
-            -m "output/${arg}_${prune_name}" \
+            -m "output/${arg}_light_${prune_name}" \
             --eval \
             --port $port \
             --start_pointcloud "output/$arg/point_cloud/iteration_30000/point_cloud.ply" \
@@ -71,7 +71,7 @@ prune_name="${prune_names[i]}"
             --position_lr_init 0.000000005 \
             --position_lr_final 0.00000000005 \
             --scaling_lr 0.000000125 \
-            --v_pow $vp > "logs_prune/${arg}_${prune_name}_prunned.log" 2>&1 &
+            --v_pow $vp > "logs_prune/${arg}_light_${prune_name}_prunned.log" 2>&1 &
 
           # Increment the port number for the next run
           ((port++))
