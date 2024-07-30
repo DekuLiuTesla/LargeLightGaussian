@@ -13,8 +13,8 @@ port=3526
 
 # Datasets
 declare -a run_args=(
-    "residence_c20_r4_light_40"
-    "residence_c20_r4_light_50"
+    # "residence_c20_r4_light_40"
+    # "residence_c20_r4_light_50"
     "residence_c20_r4_light_60"
 )
 
