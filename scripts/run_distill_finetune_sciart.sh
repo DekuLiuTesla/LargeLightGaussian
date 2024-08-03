@@ -35,7 +35,6 @@ for arg in "${run_args[@]}"; do
           -m "output/${arg}_distill" \
           --start_checkpoint "output/${arg}/chkpnt30000.pth" \
           --iteration 40000 \
-          --eval \
           --teacher_model "output/${arg}/chkpnt30000.pth" \
           --new_max_sh 2 \
           --position_lr_init 0.0000003 \

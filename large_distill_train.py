@@ -16,9 +16,10 @@ from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
 import sys
 from scene import LargeScene, GaussianModel
+from scene.cameras import MiniCamPlus
+from scene.datasets import GSDataset, CacheDataLoader
 from utils.general_utils import safe_state
 import uuid
-from os import makedirs
 from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
@@ -68,6 +69,8 @@ def training(args, dataset, opt, pipe, testing_iterations, saving_iterations, ch
     
     student_gaussians = GaussianModel(old_sh_degree)
     student_scene = LargeScene(dataset, student_gaussians)
+    gs_dataset = GSDataset(student_scene.getTrainCameras(), student_scene, dataset, pipe)
+    data_loader = CacheDataLoader(gs_dataset, max_cache_num=512, seed=42, batch_size=1, shuffle=True, num_workers=8)
 
     if checkpoint:
         (teacher_model_params, _) = torch.load(args.teacher_model)
@@ -98,82 +101,94 @@ def training(args, dataset, opt, pipe, testing_iterations, saving_iterations, ch
     print("Number of student points at initialisation : ", student_gaussians._opacity.shape[0])
 
     # os.makedirs(student_scene.model_path + "/vis_data", exist_ok=True)
-    for iteration in range(first_iter, opt.iterations + 1):        
-        if network_gui.conn == None:
-            network_gui.try_connect()
-        while network_gui.conn != None:
-            try:
-                net_image_bytes = None
-                custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
-                if custom_cam != None:
-                    net_image = render(custom_cam, student_gaussians, pipe, background, scaling_modifer)["render"]
-                    net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
-                network_gui.send(net_image_bytes, dataset.source_path)
-                if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
-                    break
-            except Exception as e:
-                network_gui.conn = None
+    iteration = first_iter
+    while iteration <= opt.iterations:
+        for dataset_index, (cam_info, _) in enumerate(data_loader):    
+            if network_gui.conn == None:
+                network_gui.try_connect()
+            while network_gui.conn != None:
+                try:
+                    net_image_bytes = None
+                    custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
+                    if custom_cam != None:
+                        net_image = render(custom_cam, student_gaussians, pipe, background, scaling_modifer)["render"]
+                        net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
+                    network_gui.send(net_image_bytes, dataset.source_path)
+                    if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
+                        break
+                except Exception as e:
+                    network_gui.conn = None
 
-        iter_start.record()
-        student_gaussians.update_learning_rate(iteration)
+            iter_start.record()
+            student_gaussians.update_learning_rate(iteration)
 
-        # Every 500 iterations step in scheduler
-        if iteration % 500 == 0:
-            # student_gaussians.oneupSHdegree()
-            student_gaussians.scheduler.step()
-        
-        if not viewpoint_stack:
-            viewpoint_stack = student_scene.getTrainCameras().copy()
-        idx = randint(0, len(viewpoint_stack) - 1)
-        c = viewpoint_stack.pop(idx)
-        viewpoint_cam_org = loadCam(dataset, idx, c, 1)
-        viewpoint_cam = copy.deepcopy(viewpoint_cam_org)
-
-        if (iteration - 1) == debug_from:
-            pipe.debug = True
+            # Every 500 iterations step in scheduler
+            if iteration % 500 == 0:
+                # student_gaussians.oneupSHdegree()
+                student_gaussians.scheduler.step()
             
-        if args.augmented_view:
-            viewpoint_cam = gaussian_poses(viewpoint_cam, mean= 0, std_dev_translation=0.05, std_dev_rotation=0)
-            student_render_pkg = render(viewpoint_cam, student_gaussians, pipe, background)
-            student_image = student_render_pkg["render"]
-            teacher_render_pkg = render(viewpoint_cam, teacher_gaussians, pipe, background)        
-            teacher_image = teacher_render_pkg["render"].detach() 
-        else:
-            render_pkg = render(viewpoint_cam, student_gaussians, pipe, background)
-            student_image = render_pkg["render"]
-            teacher_image = render(viewpoint_cam, teacher_gaussians, pipe, background)["render"].detach() 
-        Ll1 = l1_loss(student_image, teacher_image)
-        # Ll1 = img2mse(student_image, teacher_image)
+            viewpoint_cam_org = MiniCamPlus(
+                cam_info["R"],
+                cam_info["T"],
+                cam_info["image_width"],
+                cam_info["image_height"],
+                cam_info["FoVy"],
+                cam_info["FoVx"],
+                0.01,
+                100,
+                cam_info["world_view_transform"],
+                cam_info["projection_matrix"],
+                cam_info["full_proj_transform"],
+            )
+            viewpoint_cam = copy.deepcopy(viewpoint_cam_org)
 
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(student_image, teacher_image))
-        loss.backward()
-        iter_end.record()
-        with torch.no_grad():
-            ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
-            if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
-                progress_bar.update(10)
-            if iteration == opt.iterations:
-                progress_bar.close()
+            if (iteration - 1) == debug_from:
+                pipe.debug = True
+                
+            if args.augmented_view:
+                viewpoint_cam = gaussian_poses(viewpoint_cam, mean= 0, std_dev_translation=0.05, std_dev_rotation=0)
+                student_render_pkg = render(viewpoint_cam, student_gaussians, pipe, background)
+                student_image = student_render_pkg["render"]
+                teacher_render_pkg = render(viewpoint_cam, teacher_gaussians, pipe, background)        
+                teacher_image = teacher_render_pkg["render"].detach() 
+            else:
+                render_pkg = render(viewpoint_cam, student_gaussians, pipe, background)
+                student_image = render_pkg["render"]
+                teacher_image = render(viewpoint_cam, teacher_gaussians, pipe, background)["render"].detach() 
+            Ll1 = l1_loss(student_image, teacher_image)
+            # Ll1 = img2mse(student_image, teacher_image)
 
-            if (iteration in saving_iterations):
-                print("\n[ITER {}] Saving Gaussians".format(iteration))
-                ic(student_gaussians._features_rest.detach().shape)
-                student_scene.save(iteration)
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(student_image, teacher_image))
+            loss.backward()
+            iter_end.record()
+            with torch.no_grad():
+                ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+                if iteration % 10 == 0:
+                    progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+                    progress_bar.update(10)
+                if iteration == opt.iterations:
+                    progress_bar.close()
 
-            training_report_large(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, dataset, student_scene, render, (pipe, background))
+                if (iteration in saving_iterations):
+                    print("\n[ITER {}] Saving Gaussians".format(iteration))
+                    ic(student_gaussians._features_rest.detach().shape)
+                    student_scene.save(iteration)
 
-            # Optimizer step
-            if iteration < opt.iterations:
-                student_gaussians.optimizer.step()
-                student_gaussians.optimizer.zero_grad(set_to_none = True)
+                training_report_large(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, dataset, student_scene, render, (pipe, background))
 
-            if (iteration in checkpoint_iterations):
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                if not os.path.exists(student_scene.model_path):
-                    os.makedirs(student_scene.model_path)
-                torch.save((student_gaussians.capture(), iteration), student_scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+                if (iteration in checkpoint_iterations):
+                    print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                    if not os.path.exists(student_scene.model_path):
+                        os.makedirs(student_scene.model_path)
+                    torch.save((student_gaussians.capture(), iteration), student_scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
+                # Optimizer step
+                if iteration < opt.iterations:
+                    student_gaussians.optimizer.step()
+                    student_gaussians.optimizer.zero_grad(set_to_none = True)
+                    iteration += 1
+                else:
+                    return
 
 
 if __name__ == "__main__":

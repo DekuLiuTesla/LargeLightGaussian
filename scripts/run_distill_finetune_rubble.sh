@@ -2,7 +2,7 @@
 
 # Function to get the id of an available GPU
 get_available_gpu() {
-  local mem_threshold=5000
+  local mem_threshold=500
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -v threshold="$mem_threshold" -F', ' '
   $2 < threshold { print $1; exit }
   '
@@ -35,7 +35,6 @@ for arg in "${run_args[@]}"; do
           -m "output/${arg}_distill" \
           --start_checkpoint "output/${arg}/chkpnt30000.pth" \
           --iteration 40000 \
-          --eval \
           --teacher_model "output/${arg}/chkpnt30000.pth" \
           --new_max_sh 2 \
           --position_lr_init 0.0000003 \

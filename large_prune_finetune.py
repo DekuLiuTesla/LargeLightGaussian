@@ -13,15 +13,15 @@ import os
 import torch
 from random import randint
 from utils.loss_utils import l1_loss, ssim
-from lpipsPyTorch import lpips
-from gaussian_renderer import render, network_gui, count_render
+from gaussian_renderer import render, network_gui
 import sys
 from scene import LargeScene, GaussianModel
+from scene.datasets import GSDataset, CacheDataLoader
+from scene.cameras import MiniCam
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr
-from utils.camera_utils import loadCam
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 import numpy as np
@@ -68,6 +68,8 @@ def training(
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = LargeScene(dataset, gaussians)
+    gs_dataset = GSDataset(scene.getTrainCameras(), scene, dataset, pipe)
+    data_loader = CacheDataLoader(gs_dataset, max_cache_num=1024, seed=42, batch_size=1, shuffle=True, num_workers=8)
     if checkpoint:
         gaussians.training_setup(opt)
         (model_params, first_iter) = torch.load(checkpoint)
@@ -175,125 +177,135 @@ def training(
         ic(gaussians.get_xyz.shape)
         ic(len(gaussians.optimizer.param_groups[0]['params'][0]))
 
-    for iteration in range(first_iter, opt.iterations + 1):
-        if network_gui.conn == None:
-            network_gui.try_connect()
-        while network_gui.conn != None:
-            try:
-                net_image_bytes = None
-                (
-                    custom_cam,
-                    do_training,
-                    pipe.convert_SHs_python,
-                    pipe.compute_cov3D_python,
-                    keep_alive,
-                    scaling_modifer,
-                ) = network_gui.receive()
-                if custom_cam != None:
-                    net_image = render(
-                        custom_cam, gaussians, pipe, background, scaling_modifer
-                    )["render"]
-                    net_image_bytes = memoryview(
-                        (torch.clamp(net_image, min=0, max=1.0) * 255)
-                        .byte()
-                        .permute(1, 2, 0)
-                        .contiguous()
-                        .cpu()
-                        .numpy()
-                    )
-                network_gui.send(net_image_bytes, dataset.source_path)
-                if do_training and (
-                    (iteration < int(opt.iterations)) or not keep_alive
-                ):
-                    break
-            except Exception as e:
-                network_gui.conn = None
+    iteration = first_iter
+    while iteration <= opt.iterations:
 
-        iter_start.record()
+        for dataset_index, (cam_info, gt_image) in enumerate(data_loader):
+            if network_gui.conn == None:
+                network_gui.try_connect()
+            while network_gui.conn != None:
+                try:
+                    net_image_bytes = None
+                    (
+                        custom_cam,
+                        do_training,
+                        pipe.convert_SHs_python,
+                        pipe.compute_cov3D_python,
+                        keep_alive,
+                        scaling_modifer,
+                    ) = network_gui.receive()
+                    if custom_cam != None:
+                        net_image = render(
+                            custom_cam, gaussians, pipe, background, scaling_modifer
+                        )["render"]
+                        net_image_bytes = memoryview(
+                            (torch.clamp(net_image, min=0, max=1.0) * 255)
+                            .byte()
+                            .permute(1, 2, 0)
+                            .contiguous()
+                            .cpu()
+                            .numpy()
+                        )
+                    network_gui.send(net_image_bytes, dataset.source_path)
+                    if do_training and (
+                        (iteration < int(opt.iterations)) or not keep_alive
+                    ):
+                        break
+                except Exception as e:
+                    network_gui.conn = None
 
-        gaussians.update_learning_rate(iteration)
+            iter_start.record()
 
-        # Every 1000 its we increase the levels of SH up to a maximum degree
-        if iteration % 1000 == 0:
-            gaussians.oneupSHdegree()
-        if iteration % 400 == 0:
-            gaussians.scheduler.step()
+            gaussians.update_learning_rate(iteration)
 
-        # Pick a random Camera
-        if not viewpoint_stack:
-            viewpoint_stack = scene.getTrainCameras().copy()
-        idx = randint(0, len(viewpoint_stack) - 1)
-        c = viewpoint_stack.pop(idx)
-        viewpoint_cam = loadCam(dataset, idx, c, 1)
-
-        # Render
-        if (iteration - 1) == debug_from:
-            pipe.debug = True
-        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        image, viewspace_point_tensor, visibility_filter, radii = (
-            render_pkg["render"],
-            render_pkg["viewspace_points"],
-            render_pkg["visibility_filter"],
-            render_pkg["radii"],
-        )
-
-        # Loss
-        gt_image = viewpoint_cam.original_image.cuda()
-        Ll1 = l1_loss(image, gt_image)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (
-            1.0 - ssim(image, gt_image)
-        )
-
-        loss.backward()
-
-        iter_end.record()
-
-        with torch.no_grad():
-            # Progress bar
-            ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+            # Every 1000 its we increase the levels of SH up to a maximum degree
             if iteration % 1000 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
-                progress_bar.update(1000)
-            if iteration == opt.iterations:
-                progress_bar.close()
+                gaussians.oneupSHdegree()
+            if iteration % 400 == 0:
+                gaussians.scheduler.step()
 
-            # Log and save
-
-            if iteration in saving_iterations:
-                print("\n[ITER {}] Saving Gaussians".format(iteration))
-                scene.save(iteration)
-
-            if iteration in checkpoint_iterations:
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                if not os.path.exists(scene.model_path):
-                    os.makedirs(scene.model_path)
-                torch.save(
-                    (gaussians.capture(), iteration),
-                    scene.model_path + "/chkpnt" + str(iteration) + ".pth",
-                )
-                
-                if iteration == checkpoint_iterations[-1]:
-                    gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background, dataset)
-                    v_list = calculate_v_imp_score(gaussians, imp_list, args.v_pow)
-                    np.savez(os.path.join(scene.model_path,"imp_score"), v_list.cpu().detach().numpy()) 
-
-
-            training_report(
-                tb_writer,
-                iteration,
-                Ll1,
-                loss,
-                l1_loss,
-                iter_start.elapsed_time(iter_end),
-                testing_iterations,
-                scene,
-                render,
-                (pipe, background),
+            # Render
+            if (iteration - 1) == debug_from:
+                pipe.debug = True
+            
+            viewpoint_cam = MiniCam(
+                cam_info["image_width"],
+                cam_info["image_height"],
+                cam_info["FoVy"],
+                cam_info["FoVx"],
+                0.01,
+                100,
+                cam_info["world_view_transform"],
+                cam_info["full_proj_transform"],
+            )
+            render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+            image, viewspace_point_tensor, visibility_filter, radii = (
+                render_pkg["render"],
+                render_pkg["viewspace_points"],
+                render_pkg["visibility_filter"],
+                render_pkg["radii"],
             )
 
-            if iteration < opt.iterations:
-                gaussians.optimizer.step()
-                gaussians.optimizer.zero_grad(set_to_none=True)
+            # Loss
+            gt_image = gt_image.cuda()
+            Ll1 = l1_loss(image, gt_image)
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (
+                1.0 - ssim(image, gt_image)
+            )
+
+            loss.backward()
+
+            iter_end.record()
+
+            with torch.no_grad():
+                # Progress bar
+                ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+                if iteration % 1000 == 0:
+                    progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+                    progress_bar.update(1000)
+                if iteration == opt.iterations:
+                    progress_bar.close()
+
+                # Log and save
+
+                if iteration in saving_iterations:
+                    print("\n[ITER {}] Saving Gaussians".format(iteration))
+                    scene.save(iteration)
+
+                if iteration in checkpoint_iterations:
+                    print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                    if not os.path.exists(scene.model_path):
+                        os.makedirs(scene.model_path)
+                    torch.save(
+                        (gaussians.capture(), iteration),
+                        scene.model_path + "/chkpnt" + str(iteration) + ".pth",
+                    )
+                    
+                    if iteration == checkpoint_iterations[-1]:
+                        gaussian_list, imp_list = prune_list(gaussians, scene, pipe, background, dataset)
+                        v_list = calculate_v_imp_score(gaussians, imp_list, args.v_pow)
+                        np.savez(os.path.join(scene.model_path,"imp_score"), v_list.cpu().detach().numpy()) 
+
+
+                training_report(
+                    tb_writer,
+                    iteration,
+                    Ll1,
+                    loss,
+                    l1_loss,
+                    iter_start.elapsed_time(iter_end),
+                    testing_iterations,
+                    scene,
+                    render,
+                    (pipe, background),
+                )
+
+                if iteration < opt.iterations:
+                    gaussians.optimizer.step()
+                    gaussians.optimizer.zero_grad(set_to_none=True)
+                    iteration += 1
+                else:
+                    return
 
 
 if __name__ == "__main__":
