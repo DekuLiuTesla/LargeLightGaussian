@@ -70,7 +70,7 @@ def training(args, dataset, opt, pipe, testing_iterations, saving_iterations, ch
     student_gaussians = GaussianModel(old_sh_degree)
     student_scene = LargeScene(dataset, student_gaussians)
     gs_dataset = GSDataset(student_scene.getTrainCameras(), student_scene, dataset, pipe)
-    data_loader = CacheDataLoader(gs_dataset, max_cache_num=512, seed=42, batch_size=1, shuffle=True, num_workers=8)
+    data_loader = CacheDataLoader(gs_dataset, max_cache_num=opt.max_cache_num, seed=42, batch_size=1, shuffle=True, num_workers=8)
 
     if checkpoint:
         (teacher_model_params, _) = torch.load(args.teacher_model)

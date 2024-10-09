@@ -69,7 +69,7 @@ def training(
     gaussians = GaussianModel(dataset.sh_degree)
     scene = LargeScene(dataset, gaussians)
     gs_dataset = GSDataset(scene.getTrainCameras(), scene, dataset, pipe)
-    data_loader = CacheDataLoader(gs_dataset, max_cache_num=1024, seed=42, batch_size=1, shuffle=True, num_workers=8)
+    data_loader = CacheDataLoader(gs_dataset, max_cache_num=opt.max_cache_num, seed=42, batch_size=1, shuffle=True, num_workers=8)
     if checkpoint:
         gaussians.training_setup(opt)
         (model_params, first_iter) = torch.load(checkpoint)
